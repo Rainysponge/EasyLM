@@ -66,7 +66,7 @@ script to set up the TPU host.
 ./scripts/tpu_vm_setup.sh
 ```
 
-#### pip install jax jaxlib 
+### Install jax jaxlib 
 CPU
 
 do nothing
@@ -93,6 +93,37 @@ pip uninstall jax jaxlib
 pip install "jax[cuda11_pip]==0.4.11" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
+### Secretflow SPU
+这里简要介绍一下如何运行SPU中example/python/ml/flax_llama.py
+#### Install bazel
+```sh
+sudo apt install g++ unzip zip
+sudo apt-get install openjdk-11-jdk
+chmod +x bazel-<version>-installer-linux-x86_64.sh
+sudo ./bazel-<version>-installer-linux-x86_64.sh
+```
+#### Install cmake
+```sh
+sudo apt install cmake
+```
+#### Install go
+安装包下载地址为：[https://go.dev/dl/](https://go.dev/dl/)
+```sh
+tar -C /usr/local -xzf go<version>linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+```
+#### gcc
+在运行SPU example中的llama时可能会出现gcc版本问题，需要重新安装，大概就是下载，解压之后运行
+```sh
+make
+make install
+```
+#### Install secretflow&spu
+```sh
+pip install -U secretflow
+pip install -U spu
+```
+后面按照其readme可能就可以了，虽然我还是没有成功，所以我就自己写了，如果不需要bazel来编译还是可以运行的
 
 ## [Documentations](docs/README.md)
 The EasyLM documentations can be found in the [docs](docs/) directory.
