@@ -66,6 +66,33 @@ script to set up the TPU host.
 ./scripts/tpu_vm_setup.sh
 ```
 
+#### pip install jax jaxlib 
+CPU
+
+do nothing
+
+
+TPU:
+
+```sh
+pip uninstall jax jaxlib
+pip install "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+```
+
+CUDA 12:
+
+```sh
+pip uninstall jax jaxlib
+pip install "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
+CUDA 11.8:
+
+```sh
+pip uninstall jax jaxlib
+pip install "jax[cuda11_pip]==0.4.11" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
 
 ## [Documentations](docs/README.md)
 The EasyLM documentations can be found in the [docs](docs/) directory.
