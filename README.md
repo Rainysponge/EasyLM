@@ -69,7 +69,10 @@ script to set up the TPU host.
 ### Install jax jaxlib 
 CPU
 
-do nothing
+```sh
+pip install jax==0.4.11 jaxlib==0.4.11
+```
+jax, jaxlib <= 0.4.12
 
 
 TPU:
@@ -92,6 +95,7 @@ CUDA 11.8:
 pip uninstall jax jaxlib
 pip install "jax[cuda11_pip]==0.4.11" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
+为了在jax上面使用GPU请关注cuda和cudnn版本
 
 ### Secretflow SPU
 这里简要介绍一下如何运行SPU中example/python/ml/flax_llama.py
