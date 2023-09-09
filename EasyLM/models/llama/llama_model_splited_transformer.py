@@ -271,6 +271,7 @@ class RMSNorm(nn.Module):
 
         return output * weight
 
+
 def precompute_freqs_cis(dim: int, end: int, theta: float=10000.0, dtype: jnp.dtype=jnp.float32) -> jnp.ndarray:
     freqs = 1.0 / (theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(dtype) / dim))
     t = np.arange(end)  # type: ignore
@@ -278,6 +279,7 @@ def precompute_freqs_cis(dim: int, end: int, theta: float=10000.0, dtype: jnp.dt
     sin, cos = np.sin(freqs), np.cos(freqs)
     freqs_cis = np.complex64(cos + 1j * sin)
     return jnp.asarray(freqs_cis)
+
 
 def apply_rotary_emb(
     xq: jnp.ndarray,
@@ -291,6 +293,8 @@ def apply_rotary_emb(
 
     xq_ = jax.lax.complex(reshape_xq[..., 0], reshape_xq[..., 1])
     xk_ = jax.lax.complex(reshape_xk[..., 0], reshape_xk[..., 1])
+    
+
 
     # add head dim
     freqs_cis = jnp.reshape(freqs_cis, (*freqs_cis.shape[:2], 1, *freqs_cis.shape[2:]))
@@ -302,6 +306,48 @@ def apply_rotary_emb(
     xk_out = jnp.stack((jnp.real(xk_out), jnp.imag(xk_out)), axis=-1).reshape(*xk_out.shape[:-1], -1)
 
     return xq_out.astype(dtype), xk_out.astype(dtype)
+# def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, dtype: jnp.dtype = jnp.float32) -> jnp.ndarray:
+#     freqs = 1.0 / (theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(dtype) / dim))
+#     t = np.arange(end)
+#     freqs = jnp.outer(jnp.asarray(t, dtype=dtype), freqs)
+#     sin, cos = jnp.sin(freqs), jnp.cos(freqs)
+
+#     # 构建复数数组（两个浮点数数组：实部和虚部）
+#     freqs_cis_real = cos.astype(jnp.float32)
+#     freqs_cis_imag = sin.astype(jnp.float32)
+
+#     return jnp.stack([freqs_cis_real, freqs_cis_imag], axis=-1)
+
+# def apply_rotary_emb(
+#     xq: jnp.ndarray,
+#     xk: jnp.ndarray,
+#     freqs_cis: jnp.ndarray,
+#     dtype: jnp.dtype = jnp.float32,
+# ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+
+#     reshape_xq = xq.astype(jnp.float32).reshape(*xq.shape[:-1], -1, 2)
+#     reshape_xk = xk.astype(jnp.float32).reshape(*xk.shape[:-1], -1, 2)
+
+#     xq_real = reshape_xq[..., 0]
+#     xq_imag = reshape_xq[..., 1]
+
+#     xk_real = reshape_xk[..., 0]
+#     xk_imag = reshape_xk[..., 1]
+
+#     # add head dim
+#     freqs_cis = jnp.reshape(freqs_cis, (*freqs_cis.shape[:2], 1, *freqs_cis.shape[2:]))
+
+#     xq_out_real = xq_real * freqs_cis[..., 0] - xq_imag * freqs_cis[..., 1]
+#     xq_out_imag = xq_real * freqs_cis[..., 1] + xq_imag * freqs_cis[..., 0]
+
+#     xq_out = jnp.stack((xq_out_real, xq_out_imag), axis=-1).reshape(*xq_out_real.shape[:-1], -1)
+
+#     xk_out_real = xk_real * freqs_cis[..., 0] - xk_imag * freqs_cis[..., 1]
+#     xk_out_imag = xk_real * freqs_cis[..., 1] + xk_imag * freqs_cis[..., 0]
+
+#     xk_out = jnp.stack((xk_out_real, xk_out_imag), axis=-1).reshape(*xk_out_real.shape[:-1], -1)
+
+#     return xq_out.astype(dtype), xk_out.astype(dtype)
 
 
 class FlaxLLaMAAttention(nn.Module):
@@ -426,6 +472,7 @@ class FlaxLLaMAAttention(nn.Module):
             dropout_rng = self.make_rng("dropout")
 
         if self.config.scan_attention and not (self.has_variable("cache", "cached_key") or init_cache):
+            # print('self.config.scan_attention and not (self.has_variable("cache", "cached_key") or init_cache)')
             # doesn't need blockwise attention if we are doing autoregressive decoding since no quadratic memory
 
             # attention mask without nxn materlization, blockwise_attn will handle the rest
@@ -541,6 +588,7 @@ class FlaxLLaMAMLP(nn.Module):
 
     def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         x = self.w2(nn.silu(self.w1(x)) * self.w3(x))
+        # x = self.w2(jax.nn.gelu(self.w1(x)) * self.w3(x))
         x = self.dropout(x, deterministic=deterministic)
         return x
 
@@ -704,6 +752,7 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
                 cache.
         """
         # init input variables to retrieve cache
+        # if other_shape is None:
         input_ids = jnp.ones((batch_size, max_length))
         attention_mask = jnp.ones_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -712,6 +761,15 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
             jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return init_variables["cache"]
+        # else:
+        #     input_ids = jnp.ones(other_shape)
+        #     attention_mask = jnp.ones_like(jnp.ones((1, other_shape[1])))
+        #     position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(attention_mask).shape[-1]), attention_mask.shape)
+
+        #     init_variables = self.module.init(
+        #         jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+        #     )
+        #     return init_variables["cache"]
 
     @add_start_docstrings_to_model_forward("")
     def __call__(
@@ -762,6 +820,158 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            False,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            rngs=rngs,
+            mutable=mutable, 
+        )
+
+        # add updated cache to model output
+        if past_key_values is not None and return_dict:
+            outputs, past_key_values = outputs
+            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            outputs, past_key_values = outputs
+            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+
+        return outputs
+
+
+class FlaxLLaMAPreTrainedModelServer(FlaxPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = LLaMAConfig
+    base_model_prefix = "transformer"
+    module_class: nn.Module = None
+
+    def __init__(
+        self,
+        config: LLaMAConfig,
+        input_shape: Tuple = (1, 1, 4096),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        **kwargs,
+    ):
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+        # init input tensors
+        # print("FlaxLLaMAPreTrainedModelServer init_weights")
+        input_ids = jnp.zeros(input_shape, dtype="i4")
+        tmp_ids = jnp.zeros(input_shape[:2],dtype="i4")
+        attention_mask = jnp.ones_like(jnp.zeros(input_shape[:2], dtype="i4"))
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(tmp_ids).shape[-1]), input_shape[:2])
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        if self.config.add_cross_attention:
+            encoder_hidden_states = jnp.zeros(input_shape + (self.config.hidden_size,))
+            encoder_attention_mask = attention_mask
+            module_init_outputs = self.module.init(
+                rngs,
+                input_ids,
+                attention_mask,
+                position_ids,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                return_dict=False,
+            )
+        else:
+
+            module_init_outputs = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)
+        
+        random_params = module_init_outputs["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
+
+    def init_cache(self, batch_size, max_length):
+        r"""
+        Args:
+            batch_size (`int`):
+                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
+            max_length (`int`):
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
+                cache.
+        """
+        # init input variables to retrieve cache
+        input_ids = jnp.ones((batch_size, max_length))
+        attention_mask = jnp.ones_like(input_ids)
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
+        init_variables = self.module.init(
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+        )
+        return init_variables["cache"]
+
+    @add_start_docstrings_to_model_forward("")
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        position_ids=None,
+        params: dict = None,
+        past_key_values: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        
+        
+        batch_size, sequence_length = input_ids.shape[:2]
+
+        if position_ids is None:
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
+
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        if attention_mask is None:
+            attention_mask = jnp.ones((batch_size, sequence_length))
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        inputs = {"params": params or self.params}
+
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPTJAttention module
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+        # print("FlaxLLaMAPreTrainedModelServer call input_ids", input_ids)
+        outputs = self.module.apply(
+            inputs,
+            jnp.array(input_ids, dtype=jnp.float32),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             not train,
@@ -1170,17 +1380,17 @@ class FlaxLLaMAModuleMidEmbed(nn.Module):
             hidden_states = self.dropout(input_embeds, deterministic=deterministic)
 
         else:
-            # hidden_states = input_ids  # 暂时性的绕过aJax
-            with open("./embed.txt", "rb") as f:
-                data_str = f.read()
+            hidden_states = input_ids  # 暂时性的绕过aJax
+            # with open("./embed.txt", "rb") as f:
+            #     data_str = f.read()
 
-                numpy_array = np.frombuffer(data_str, dtype=np.float32)
-            t = numpy_array.shape[0] // 4096
-            numpy_array = numpy_array.reshape(1, t, 4096)
+            #     numpy_array = np.frombuffer(data_str, dtype=np.float32)
+            # t = numpy_array.shape[0] // 4096
+            # numpy_array = numpy_array.reshape(1, t, 4096)
 
-            hidden_states = jax.device_put(numpy_array)
-            # hidden_states = hidden_states.
-            hidden_states = jnp.array(numpy_array, dtype=jnp.float32)
+            # hidden_states = jax.device_put(numpy_array)
+            # # hidden_states = hidden_states.
+            # hidden_states = jnp.array(numpy_array, dtype=jnp.float32)
             # print("FlaxLLaMAModuleMidEmbed hidden_states", hidden_states.shape, hidden_states.dtype)
 
         outputs = self.h(
@@ -1241,15 +1451,15 @@ class FlaxLLaMAModuleServerEmbed(nn.Module):
             hidden_states = self.dropout(input_embeds, deterministic=deterministic)
 
         else:
-            # hidden_states = input_ids  暂时性的绕过aJax
-            with open("./tmp.txt", "rb") as f:
-                data_str = f.read()
+            hidden_states = input_ids  # 暂时性的绕过Jax
+            # with open("./tmp.txt", "rb") as f:
+            #     data_str = f.read()
 
-                numpy_array = np.frombuffer(data_str, dtype=np.float32)
-            t = numpy_array.shape[0] // 4096
-            numpy_array = numpy_array.reshape(1, t, 4096)
+            #     numpy_array = np.frombuffer(data_str, dtype=np.float32)
+            # t = numpy_array.shape[0] // 4096
+            # numpy_array = numpy_array.reshape(1, t, 4096)
 
-            hidden_states = jax.device_put(numpy_array)
+            # hidden_states = jax.device_put(numpy_array)
 
 
 
@@ -1289,7 +1499,7 @@ class FlaxLLaMAModel(FlaxLLaMAPreTrainedModel):
     module_class = FlaxLLaMAModule
 
 @add_start_docstrings("", "")
-class FlaxLLaMAModelServer(FlaxLLaMAPreTrainedModel):
+class FlaxLLaMAModelServer(FlaxLLaMAPreTrainedModelServer):
     module_class = FlaxLLaMAModuleServerEmbed
 
 @add_start_docstrings("", "")
@@ -1537,7 +1747,7 @@ class FlaxLLaMAForCausalLMClientEmbedModule(nn.Module):
         return outputs
 
 @add_start_docstrings("", "")
-class FlaxLLaMAForCausalLMMid(FlaxLLaMAPreTrainedModel):
+class FlaxLLaMAForCausalLMMid(FlaxLLaMAPreTrainedModelServer):
     module_class = FlaxLLaMAForCausalLMMidEmbedModule
 
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
@@ -1574,7 +1784,7 @@ class FlaxLLaMAForCausalLMMid(FlaxLLaMAPreTrainedModel):
 
 
 @add_start_docstrings("", "")
-class FlaxLLaMAForCausalLMServer(FlaxLLaMAPreTrainedModel):
+class FlaxLLaMAForCausalLMServer(FlaxLLaMAPreTrainedModelServer):
     module_class = FlaxLLaMAForCausalLMServerEmbedModule
     # module_class = FlaxLLaMAForCausalLMModule
 
@@ -1584,7 +1794,7 @@ class FlaxLLaMAForCausalLMServer(FlaxLLaMAPreTrainedModel):
         if len(input_ids.shape) == 2:
             batch_size, seq_length = input_ids.shape
         else:
-            batch_size, seq_length = 1, 2048
+            batch_size, seq_length = input_ids.shape[:2]
 
         past_key_values = self.init_cache(batch_size, max_length)
         # print("past_key_values", past_key_values)

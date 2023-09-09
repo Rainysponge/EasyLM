@@ -1,3 +1,24 @@
+# import argparse
+# import json
+# import jax
+# import jax.numpy as jnp
+# import jax.nn as jnn
+# import flax.linen as nn
+# from flax.linen.linear import Array
+# from typing import Any, Optional, Tuple, Union
+# import torch
+
+# from transformers import LlamaTokenizer, LlamaForCausalLM
+# from EasyLM.models.llama.llama_model import LLaMAConfig, FlaxLLaMAForCausalLM
+# from transformers import AutoTokenizer, FlaxGPT2LMHeadModel, GPT2Config
+
+# import spu.utils.distributed as ppd
+# from contextlib import contextmanager
+
+# model_path = '/mnt/workspace/huzhanyi/llama/JAX_llama/llama_hf/'
+# tokenizer = LlamaTokenizer.from_pretrained(model_path)
+# pretrained_model = FlaxLLaMAForCausalLM.from_pretrained(model_path, from_pt=True)
+
 import pprint
 from functools import partial
 
@@ -172,7 +193,15 @@ def init_model_and_optimizer(rng):
     optimizer = optax.adam(learning_rate=FLAGS.learning_rate).create(params)
     return hf_model, optimizer
 
-
+# def text_generation(input_ids, params, token_num=8):
+#     config = LLaMAConfig()
+#     model = FlaxLLaMAForCausalLM(config=config)
+#     for _ in range(token_num):
+#         outputs = model(input_ids=input_ids, params=params)
+#         next_token_logits = outputs[0][0, -1, :]
+#         next_token = jnp.argmax(next_token_logits)
+#         input_ids = jnp.concatenate([input_ids, jnp.array([[next_token]])], axis=1)
+#     return input_ids
 def text_generation(input_ids, params, token_num=8):
     config = LLaMAConfig()
     model = FlaxLLaMAForCausalLM(config=config)
@@ -201,7 +230,9 @@ def main(argv):
 
     model_path = '/mnt/workspace/huzhanyi/llama/JAX_llama/converted_llama_model/'
     tokenizer = LlamaTokenizer.from_pretrained(model_path)
-
+    # prefix_tokenizer = LLaMAConfig.get_tokenizer(
+    #     FLAGS.tokenizer, truncation_side='left', padding_side='left'
+    # )
     # tokenizer = LLaMAConfig.get_tokenizer(
     #     FLAGS.tokenizer, truncation_side='right', padding_side='right'
     # )
@@ -221,7 +252,7 @@ def main(argv):
     # with jax.default_device(jax.devices("cpu")[0]):
     #     model_client = FlaxLLaMAForCausalLMClient.from_pretrained("/mnt/workspace/huzhanyi/llama/JAX_llama/converted_llama_model/hf_new", from_pt=True)
 
-    with jax.default_device(jax.devices()[1]):
+    with jax.default_device(jax.devices("cpu")[0]):
         model_server = FlaxLLaMAForCausalLMServer(
             llama_config,
             input_shape=(1, FLAGS.seq_length),
@@ -232,9 +263,17 @@ def main(argv):
 
     print("model load compelete")
 
+    # print(params['params'])
+    # print(type(params['params']["transformer"]))
+    # print(len(params['params']["transformer"]))
+    # for _key, p in params['params']["transformer"].items():
+    #     print(_key)
+
     next_token_text = ""
     input_ids = tokenizer.encode('Hello, my dog is cute and', return_tensors='jax')
-
+    # print(input_ids)
+    # input_ids = tokenizer.encode('Hello, my husband is', return_tensors='jax')
+    # print(input_ids)
     client_params_dict = {
         "transformer":{
             "wte":params['params']["transformer"]["wte"],
@@ -246,23 +285,26 @@ def main(argv):
     for i in range(16):
         start_time = time.time()
 
+        # smasheddata, attention_mask, position_ids = _model_client(input_ids=input_ids, params=params['params'])
+        # smasheddata, attention_mask, position_ids = model_client(input_ids=input_ids, params=params['params'])
+        smasheddata, attention_mask, position_ids = embeding_generation(input_ids=input_ids, params=client_params_dict)
+
+        # _input_ids = ppd.device("P1")(lambda x: x)(input_ids)
+        # _params = ppd.device("P2")(lambda x: x)(client_params_dict)
         
-        _input_ids = ppd.device("P1")(lambda x: x)(input_ids)
-        _params = ppd.device("P2")(lambda x: x)(client_params_dict)
-        
-        smasheddata, attention_mask, position_ids = ppd.device("SPU")(embeding_generation)(_input_ids, _params)
-        smasheddata, attention_mask, position_ids = ppd.get(smasheddata), ppd.get(attention_mask), ppd.get(position_ids)
+        # smasheddata, attention_mask, position_ids = ppd.device("SPU")(embeding_generation)(_input_ids, _params)
+        # smasheddata, attention_mask, position_ids = ppd.get(smasheddata), ppd.get(attention_mask), ppd.get(position_ids)
 
         # print("before write", smasheddata, attention_mask, position_ids)
 
         # smasheddata = jax.device_put(smasheddata)
 
-        with open("./tmp.txt", "wb+") as f:
-            numpy_array = jax.device_get(smasheddata)  # 将ArrayImpl转换为NumPy数组
-            print("numpy_array", numpy_array.shape)
-
-            data_str = numpy_array.tobytes()
-            f.write(data_str)
+        # with open("./tmp.txt", "wb+") as f:
+        #     numpy_array = jax.device_get(smasheddata)  # 将ArrayImpl转换为NumPy数组
+        #     print("numpy_array", numpy_array.shape)
+        #     # 将NumPy数组转换为字符串
+        #     data_str = numpy_array.tobytes()
+        #     f.write(data_str)
 
         
         # print("smasheddata", smasheddata)
